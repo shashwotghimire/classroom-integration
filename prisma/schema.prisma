@@ -1,0 +1,124 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String              @id @default(cuid())
+  email        String              @unique
+  firstName    String?
+  lastName     String?
+  googleId     String?             @unique
+  schoolDomain String? // e.g., "myschool.edu"
+  role         String              @default("TEACHER") // TEACHER, STUDENT, ADMIN
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  googleTokens GoogleToken?
+  classes      SyncedGoogleClass[]
+}
+
+model GoogleToken {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken  String
+  refreshToken String?
+  expiresAt    DateTime
+  scope        String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// Connection to a Google Workspace domain
+model GoogleWorkspaceConnection {
+  id             String              @id @default(cuid())
+  domainName     String
+  adminEmail     String
+  serviceAccount Json
+  isActive       Boolean             @default(true)
+  lastSync       DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  classes        SyncedGoogleClass[]
+}
+
+// Classes synced from Google Classroom
+model SyncedGoogleClass {
+  id             String                      @id @default(cuid())
+  googleClassId  String                      @unique
+  connectionId   String
+  connection     GoogleWorkspaceConnection   @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  className      String
+  section        String?
+  room           String?
+  teacherEmail   String
+  teacherId      String
+  studentCount   Int                         @default(0)
+  lastRosterSync DateTime?
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
+  students       SyncedGoogleStudent[]
+  assignments    GoogleClassroomAssignment[]
+  user           User?                       @relation(fields: [userId], references: [id])
+  userId         String?
+}
+
+// Students synced from Google Classroom
+model SyncedGoogleStudent {
+  id               String                      @id @default(cuid()) // BetterSchool internal ID
+  googleUserId     String                      @unique // Google Classroom ID
+  googleEmail      String
+  firstName        String
+  lastName         String
+  classId          String
+  class            SyncedGoogleClass           @relation(fields: [classId], references: [id], onDelete: Cascade)
+  createdAt        DateTime                    @default(now())
+  updatedAt        DateTime                    @updatedAt
+  assignments      GoogleClassroomAssignment[] @relation("AssignmentStudents") // which assignments this student can see
+  googleGradeSyncs GoogleGradeSync[]
+}
+
+// Assignments mapped to Google Classroom
+model GoogleClassroomAssignment {
+  id                    String                @id @default(cuid())
+  googleAssignmentId    String?               @unique
+  betterSchoolContentId String
+  classId               String
+  class                 SyncedGoogleClass     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  title                 String
+  description           String?
+  dueDate               DateTime?
+  contentUrl            String
+  maxPoints             Float                 @default(100)
+  status                String // "ASSIGNED", "DRAFT", "COMPLETED"
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  assignedStudents      SyncedGoogleStudent[] @relation("AssignmentStudents") // supports single or multiple students
+  grades                GoogleGradeSync[]
+}
+
+// Grade syncing
+model GoogleGradeSync {
+  id              String                    @id @default(cuid())
+  assignmentId    String
+  assignment      GoogleClassroomAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  studentId       String
+  student         SyncedGoogleStudent       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  score           Float?
+  maxPoints       Float                     @default(100)
+  syncedToGoogle  Boolean                   @default(false)
+  syncError       String?
+  lastSyncAttempt DateTime?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+}
