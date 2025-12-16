@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { google } from "googleapis";
 import { getOAuth2Client, getAuthUrl } from "../integrations/oauth.client";
 import { prisma } from "../utils/prisma.utils";
+import { signToken } from "../utils/jwt.utils";
 
 export const startGoogleOAuth = (req: Request, res: Response) => {
   const authUrl = getAuthUrl();
@@ -18,6 +19,8 @@ export const googleOAuthCallback = async (req: Request, res: Response) => {
     const { code } = req.query;
     if (!code) {
       return res.status(400).json({
+        success: false,
+        message: "Failed to login",
         error: "No authorization code provided",
       });
     }
@@ -31,6 +34,8 @@ export const googleOAuthCallback = async (req: Request, res: Response) => {
 
     if (!data.email || !data.id) {
       return res.status(400).json({
+        success: false,
+        message: "Failed to login",
         error: "Unable to retrieve Google user information",
       });
     }
@@ -71,20 +76,26 @@ export const googleOAuthCallback = async (req: Request, res: Response) => {
       },
     });
 
+    const token = signToken({ id: user.id, email: user.email });
+
     return res.json({
       success: true,
       message: "Authorization successful!",
-      user: {
-        id: user.id,
-        email: user.email,
-        schoolDomain: user.schoolDomain,
+      data: {
+        user: {
+          id: user.id,
+          email: user.email,
+          schoolDomain: user.schoolDomain,
+          accessToken: token,
+        },
       },
     });
   } catch (error: any) {
     console.error("Google OAuth callback error:", error);
     return res.status(500).json({
-      error: "Google OAuth failed",
-      details: error.message,
+      success: false,
+      message: "Google OAuth failed",
+      error: error.message,
     });
   }
 };

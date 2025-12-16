@@ -6,8 +6,8 @@ import {
 
 const router = Router();
 
-router.get("/auth/google", startGoogleOAuth);
+router.get("/google", startGoogleOAuth);
 
-router.get("/auth/google/callback", googleOAuthCallback);
+router.get("/google/callback", googleOAuthCallback);
 
 export default router;
